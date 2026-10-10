@@ -1,0 +1,9 @@
+.env
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+tests
+crm_patch
+scripts
+*.zip

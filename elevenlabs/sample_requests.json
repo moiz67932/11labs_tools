@@ -1,0 +1,24 @@
+{
+  "add_to_dnc": {
+    "lead_id": "REPLACE_WITH_CONTROLLED_TEST_LEAD_ID",
+    "conversation_id": "controlled-sip-test-001",
+    "called_number": "+15125550123",
+    "reason": "requested_no_contact"
+  },
+  "save_callback": {
+    "lead_id": "REPLACE_WITH_CONTROLLED_TEST_LEAD_ID",
+    "conversation_id": "controlled-sip-test-002",
+    "called_number": "+15125550123",
+    "contact_name": "Jessica",
+    "callback_at_local": "2026-10-13T14:00:00-05:00",
+    "timezone": "America/Chicago",
+    "note": "Emily said owner Jessica can receive a callback Tuesday at 2 PM"
+  },
+  "send_portive_overview": {
+    "lead_id": "REPLACE_WITH_CONTROLLED_TEST_LEAD_ID",
+    "conversation_id": "controlled-sip-test-003",
+    "called_number": "+15125550123",
+    "recipient_email": "YOUR_CONTROLLED_TEST_EMAIL@example.com",
+    "recipient_name": "Emily"
+  }
+}

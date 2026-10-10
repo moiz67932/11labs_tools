@@ -1,0 +1,6 @@
+# If you own tools.portive.example and DNS points to your server:
+# Replace the hostname below, configure Caddy with this file, and ensure
+# ports 80 and 443 are open. Docker service binds only to 127.0.0.1:8000.
+tools.portive.example {
+  reverse_proxy 127.0.0.1:8000
+}

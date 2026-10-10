@@ -11,18 +11,30 @@ import logging
 from typing import Literal
 
 from fastapi import FastAPI, Header, HTTPException, Form, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 from pydantic import BaseModel, EmailStr, Field
-import httpx
 
 from .core import (
-    env, http_client, idempotency_key, is_dnc, is_email_suppressed,
+    idempotency_key, is_dnc, is_email_suppressed,
     lead_for_call, overview_email, parse_callback, require_tool_key, sb,
     verify_unsubscribe_token,
 )
 
+from .gmail import GmailError, gmail_config, send_gmail
+
 log = logging.getLogger("portive")
 app = FastAPI(title="Portive ElevenLabs Live Tools", version="1.0.0", docs_url="/docs")
+
+
+@app.exception_handler(RequestValidationError)
+async def overview_validation_error(request, exc):
+    if request.url.path == "/tools/send-portive-overview":
+        invalid_email = any(error["loc"] == ("body", "recipient_email") for error in exc.errors())
+        return JSONResponse(status_code=422, content={"success": False,
+                            "code": "invalid_recipient_email" if invalid_email else "invalid_overview_request"})
+    return await request_validation_exception_handler(request, exc)
 
 
 class CallContext(BaseModel):
@@ -110,6 +122,14 @@ def save_callback(body: CallbackRequest, x_portive_tool_key: str | None = Header
 @app.post("/tools/send-portive-overview")
 def send_portive_overview(body: OverviewRequest, x_portive_tool_key: str | None = Header(default=None)):
     require_tool_key(x_portive_tool_key)
+    try:
+        return _send_overview(body)
+    except HTTPException:
+        return {"success": False, "code": "email_database_unavailable",
+                "message": "Database action unconfirmed; preserve request context and do not resend"}
+
+
+def _send_overview(body: OverviewRequest):
     lead, phone, error = context_or_failure(body)
     if error:
         return error
@@ -117,11 +137,15 @@ def send_portive_overview(body: OverviewRequest, x_portive_tool_key: str | None 
     if is_dnc(phone) or is_email_suppressed(email):
         return {"success": False, "code": "contact_suppressed", "message": "Email must not be sent"}
 
-    resend_key = env("RESEND_API_KEY")
-    from_address = env("RESEND_FROM")
-    content = overview_email(recipient_name=body.recipient_name,
-                             business_name=lead.get("business_name") or "your spa",
-                             recipient_email=email)
+    try:
+        config = gmail_config()
+        content = overview_email(recipient_name=body.recipient_name,
+                                 business_name=lead.get("business_name") or "your spa",
+                                 recipient_email=email)
+    except GmailError as exc:
+        return {"success": False, "code": exc.code}
+    except HTTPException:
+        return {"success": False, "code": "email_configuration_missing_or_invalid"}
     key = idempotency_key(body.lead_id, body.conversation_id, email)
     record = {
         "lead_id": body.lead_id, "conversation_id": body.conversation_id,
@@ -134,42 +158,40 @@ def send_portive_overview(body: OverviewRequest, x_portive_tool_key: str | None 
     if not created:
         existing = sb("GET", "portive_overview_emails", params={"request_key": f"eq.{key}",
                                                               "select": "id,status,provider_email_id", "limit": "1"})
-        if existing and existing[0]["status"] == "accepted":
+        if existing and existing[0]["status"] == "accepted" and existing[0].get("provider_email_id"):
             return {"success": True, "accepted_by_provider": True, "already_sent": True,
-                    "provider_email_id": existing[0].get("provider_email_id")}
-        return {"success": False, "code": "email_already_attempted", "message": "Already pending/uncertain/failed; check provider dashboard before retry"}
+                    "provider_email_id": existing[0].get("provider_email_id"),
+                    "provider": "gmail", "delivered_to_inbox": False}
+        return {"success": False, "code": "email_already_attempted", "message": "Already pending/uncertain/failed; inspect Gmail Sent and audit record; do not resend"}
     record_id = created[0]["id"]
-    payload = {
-        "from": from_address,
-        "to": [email],
-        "subject": content["subject"],
-        "html": content["html"],
-        "reply_to": env("RESEND_REPLY_TO", required=False) or from_address,
-    }
     try:
-        response = http_client().post("https://api.resend.com/emails", json=payload, headers={
-            "Authorization": f"Bearer {resend_key}", "Content-Type": "application/json",
-            "Idempotency-Key": key,
-        }, timeout=8.0)
-        if response.status_code >= 500:
-            raise httpx.RequestError("provider_failure")
-        if not response.is_success:
+        provider_id = send_gmail(config=config, recipient=email, content=content)
+    except GmailError as exc:
+        try:
             sb("PATCH", "portive_overview_emails", params={"id": f"eq.{record_id}"},
-               body={"status": "failed", "last_error": f"Resend HTTP {response.status_code}"})
-            return {"success": False, "code": "email_provider_rejected"}
-        provider_id = response.json().get("id")
-        if not provider_id:
-            raise ValueError("Provider did not return email ID")
-    except (httpx.HTTPError, ValueError) as exc:
-        log.warning("Overview email provider result uncertain: %s", type(exc).__name__)
-        sb("PATCH", "portive_overview_emails", params={"id": f"eq.{record_id}"},
-           body={"status": "uncertain", "last_error": "Timeout/unknown provider outcome; inspect provider dashboard"})
-        return {"success": False, "code": "email_result_uncertain", "message": "Manual provider check required; do not claim sent"}
+               body={"status": "uncertain" if exc.uncertain else "failed", "last_error": exc.code})
+        except HTTPException:
+            # The pending reservation still blocks retries even if this update fails.
+            log.warning("Overview failure audit update failed")
+        result = {"success": False, "code": exc.code}
+        if exc.uncertain:
+            result["message"] = "Inspect Gmail Sent and audit record; do not resend or claim sent"
+        return result
 
-    sb("PATCH", "portive_overview_emails", params={"id": f"eq.{record_id}"},
-       body={"status": "accepted", "provider_email_id": provider_id, "last_error": None})
-    return {"success": True, "accepted_by_provider": True, "provider_email_id": provider_id,
-            "already_sent": False, "delivered_to_inbox": False}
+    try:
+        updated = sb("PATCH", "portive_overview_emails", params={"id": f"eq.{record_id}"},
+                     body={"status": "accepted", "provider_email_id": provider_id, "last_error": None},
+                     prefer="return=representation")
+        if not updated or updated[0].get("status") != "accepted" or updated[0].get("provider_email_id") != provider_id:
+            raise HTTPException(502, "Email audit update unconfirmed")
+    except HTTPException:
+        log.warning("Gmail accepted overview; audit update unconfirmed")
+        return {"success": False, "code": "email_accepted_audit_unconfirmed",
+                "accepted_by_provider": True, "provider": "gmail", "provider_email_id": provider_id,
+                "delivered_to_inbox": False,
+                "message": "Reconcile audit with this Gmail ID; do not resend"}
+    return {"success": True, "accepted_by_provider": True, "provider": "gmail",
+            "provider_email_id": provider_id, "already_sent": False, "delivered_to_inbox": False}
 
 
 @app.get("/unsubscribe", response_class=HTMLResponse)

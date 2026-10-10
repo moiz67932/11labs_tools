@@ -5,7 +5,7 @@ Three low-overhead FastAPI endpoints for Ava, connected to your **existing**
 
 - `POST /tools/add-to-dnc` -> `portive_dnc`, cancel open callback records for this lead.
 - `POST /tools/save-callback` -> EXISTING `follow_ups`, and `leads.derived_status='follow_up'`.
-- `POST /tools/send-portive-overview` -> Resend + audit table + working unsubscribe web form.
+- `POST /tools/send-portive-overview` -> Gmail API + audit table + working unsubscribe web form.
 
 **Not included:** automatic callback dialing, full ElevenLabs post-call webhook,
 LangGraph workflow, verified legal eligibility checks, or automated deployment.
@@ -44,14 +44,15 @@ first. Migration is additive, but it adds columns/indexes/functions to productio
 
 Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (server-only service role JWT or
 new `sb_secret_` key), `PORTIVE_TOOL_API_KEY` (random 40-byte string), and email
-settings in `.env`. For DNC and callbacks, Resend is not required.
+settings in `.env`. For DNC and callbacks, Gmail credentials are not required.
 
 Generate TWO different secrets:
 ```bash
 python3 -c 'import secrets;print(secrets.token_urlsafe(40))'
 ```
 
-Set email settings ONLY after verifying a sender domain at Resend. Configure
+Authorize your own Gmail account locally using [Gmail setup](docs/GMAIL_SETUP.md).
+No purchased sender domain is needed. Configure
 `PUBLIC_BASE_URL` to the eventual HTTPS address of THIS FastAPI server;
 unsubscribe routes work on the same domain. Supply your real postal address.
 
@@ -81,6 +82,12 @@ curl -sS http://127.0.0.1:8000/tools/add-to-dnc \
 Run with a dedicated test lead; or inspect tests with fake backends first.
 For this curl invocation, export the tool token into your shell first
 (the FastAPI `.env` loader does not automatically export shell variables).
+
+### Vercel deployment
+
+Keep `index.py` and all existing API URLs. Set server environment credentials
+from [Gmail setup](docs/GMAIL_SETUP.md) in Vercel Project Settings, then redeploy.
+Local authorization dependencies and token files are not needed by Vercel.
 
 ### Container deployment (optional)
 
@@ -145,10 +152,10 @@ select * from public.portive_email_suppressions order by created_at desc;
 - DNC is stored by *normalized called phone*, independent of lead ID. This
   prevents bypassing suppression through other lists once the dialer checks it.
 - Callback creation is idempotent on `(lead_id,source_conversation_id)`.
-- Email request is idempotent on `(lead_id,conversation_id,email)`. Resend's own
-  24-hour idempotency adds a second layer. **Provider acceptance is NOT delivery.**
+- Email request is reserved in Supabase on `(lead_id,conversation_id,email)`.
+  Gmail sends are never automatically retried. **Provider acceptance is NOT delivery.**
 - If an email send times out, it becomes `uncertain`; do not blindly retry and
-  risk a duplicate. Inspect the Resend dashboard before a manual retry.
+  risk a duplicate. Inspect Gmail Sent and the Supabase audit record before a manual retry.
 - SQL functions are restricted to `service_role`, and all new tables have RLS.
 - `GET /unsubscribe` only renders a confirmation page; clicking submit POSTs
   to suppress that email address. GET never silently unsubscribes on link scans.
@@ -163,6 +170,6 @@ select * from public.portive_email_suppressions order by created_at desc;
 - [ ] Wrong lead/phone refused; past and incorrect DST callback refused
 - [ ] `assertNotSuppressed` blocks existing CRM Telnyx manual calls
 - [ ] Every ElevenLabs batch uses the fresh screened CSV
-- [ ] Resend verified domain, sender, valid address/unsubscribe configured
+- [ ] Gmail OAuth credentials, authorized sender, valid address/unsubscribe configured
 - [ ] Email sends once; unsubscribe blocks future overview sends
 - [ ] Compliant automated outbound calling consent/disclosure verified separately

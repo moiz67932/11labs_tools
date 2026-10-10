@@ -182,11 +182,29 @@ def overview_email(*, recipient_name: str, business_name: str, recipient_email: 
     subject = "Portive | Receptionist & messaging overview"
     body = f"""<p>Hi {name},</p>
 <p>Thanks for requesting information about Portive for {company}.</p>
-<p>Portive helps med spas respond to incoming and missed calls, after-hours enquiries,
+<p>Portive's AI receptionist system helps med spas respond to incoming and missed calls, after-hours enquiries,
 Instagram DMs and comments, WhatsApp, and SMS. It can also help guide appointment-booking
 conversations around your existing workflow. Specific integrations are confirmed during setup.</p>
-<p>Moiz can give you a practical 5–10 minute demonstration and answer questions about your setup.</p>
+<p>Moiz can give you an optional 5–10 minute demonstration and answer questions about your setup.</p>
 <p>Best,<br>Portive Team</p>
 <hr><p style='font-size:12px'>{footer}<br>
 <a href='{safe_link}'>Unsubscribe from marketing email</a></p>"""
-    return {"subject": subject, "html": body, "unsubscribe_url": unsubscribe_url}
+    text = f"""Hi {first_name},
+
+Thanks for requesting information about Portive for {business_name or 'your spa'}.
+
+Portive's AI receptionist system helps med spas respond to incoming and missed
+calls, after-hours enquiries, Instagram DMs and comments, WhatsApp, and SMS.
+It can also help guide appointment-booking conversations around your existing
+workflow. Specific integrations are confirmed during setup.
+
+Moiz can give you an optional 5–10 minute demonstration and answer questions
+about your setup.
+
+Best,
+Portive Team
+
+{company_address}
+Unsubscribe from marketing email: {unsubscribe_url}
+"""
+    return {"subject": subject, "text": text, "html": body, "unsubscribe_url": unsubscribe_url}

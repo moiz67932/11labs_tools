@@ -1,0 +1,3 @@
+# Local OAuth setup only; not needed by Vercel.
+-r requirements.txt
+google-auth-oauthlib>=1.2,<2

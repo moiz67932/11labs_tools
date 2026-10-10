@@ -34,12 +34,17 @@ If given only "Tuesday afternoon", ask for a specific time before using the tool
 ## 3. send_portive_overview
 URL: `https://YOUR_HOST/tools/send-portive-overview`
 Description: "Use ONLY when a person explicitly asks for overview information by email.
-Confirm the recipient business email out loud, then call the tool once.
+Confirm the recipient personal or business email out loud, then call the tool once.
 Never claim inbox delivery; provider acceptance is not proof of delivery."
 Body: shared inputs + LLM parameters:
 - `recipient_email`: confirmed address
 - `recipient_name`: person receiving the overview, if known (optional)
-Expected success: `{"success":true,"accepted_by_provider":true,"delivered_to_inbox":false}`.
+Expected success: `{"success":true,"accepted_by_provider":true,"provider":"gmail","provider_email_id":"...","already_sent":false,"delivered_to_inbox":false}`.
+
+For `email_result_uncertain`, `email_already_attempted`, or
+`email_accepted_audit_unconfirmed`, do not invoke again with a new conversation
+ID or claim delivery. Flag manual Gmail/Supabase reconciliation. See
+[server Gmail setup and error codes](../docs/GMAIL_SETUP.md).
 
 ## Minimal system-prompt addition
 
@@ -64,4 +69,6 @@ booking is unaffected by these new endpoints.
 
 A business-logic error responds `{"success":false,"code":"..."}`. Ava must
 NOT tell a prospect an action was completed unless the boolean confirms it.
-An authentication error is HTTP 401; database/unreachable is HTTP 502.
+An authentication error is HTTP 401; DNC/callback database errors are HTTP 502.
+Overview database/configuration failures return `success=false` with a compact code;
+an invalid overview address returns HTTP 422 and `invalid_recipient_email`.

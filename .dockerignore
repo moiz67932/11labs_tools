@@ -7,3 +7,8 @@ tests
 crm_patch
 scripts
 *.zip
+.env*
+client_secret*.json
+credentials*.json
+token*.json
+*oauth*.json

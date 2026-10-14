@@ -5,3 +5,4 @@ pydantic[email]>=2.8,<3
 python-dotenv>=1.0,<2
 python-multipart>=0.0.9,<1
 google-auth>=2.35,<3
+elevenlabs>=2.72,<3

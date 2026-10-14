@@ -80,11 +80,17 @@ def _sb_headers(*, prefer: str | None = None) -> dict[str, str]:
 
 
 def sb(method: str, endpoint: str, *, params: dict | None = None,
-       body: dict | None = None, prefer: str | None = None):
+       body: dict | None = None, prefer: str | None = None,
+       timeout: float | None = None):
+    """Make a server-side Supabase REST request.
+
+    ``timeout`` is deliberately opt-in: the established tool routes retain their
+    six-second behaviour, while call-start lookups can use a much smaller bound.
+    """
     url = env("SUPABASE_URL").rstrip("/") + "/rest/v1/" + endpoint.lstrip("/")
     try:
         response = http_client().request(method, url, params=params, json=body,
-                                         headers=_sb_headers(prefer=prefer))
+                                         headers=_sb_headers(prefer=prefer), timeout=timeout)
         response.raise_for_status()
         if not response.content:
             return None

@@ -23,9 +23,11 @@ from .core import (
 )
 
 from .gmail import GmailError, gmail_config, send_gmail
+from .webhooks import router as webhook_router
 
 log = logging.getLogger("portive")
 app = FastAPI(title="Portive ElevenLabs Live Tools", version="1.0.0", docs_url="/docs")
+app.include_router(webhook_router)
 
 
 @app.exception_handler(RequestValidationError)

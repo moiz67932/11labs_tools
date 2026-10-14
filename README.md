@@ -7,8 +7,9 @@ Three low-overhead FastAPI endpoints for Ava, connected to your **existing**
 - `POST /tools/save-callback` -> EXISTING `follow_ups`, and `leads.derived_status='follow_up'`.
 - `POST /tools/send-portive-overview` -> Gmail API + audit table + working unsubscribe web form.
 
-**Not included:** automatic callback dialing, full ElevenLabs post-call webhook,
-LangGraph workflow, verified legal eligibility checks, or automated deployment.
+**Not included:** automatic callback dialing, LangGraph workflow, verified legal
+eligibility checks, or automated deployment. Sales webhook intake and call history
+are documented in [the webhook rollout runbook](docs/ELEVENLABS_PORTIVE_WEBHOOKS.md).
 Those are separate planned modules. Do NOT confuse this with the med-spa
 inbound booking/dental clinic scheduling system; these are outbound Portive
 sales tools only.
@@ -88,6 +89,10 @@ For this curl invocation, export the tool token into your shell first
 Keep `index.py` and all existing API URLs. Set server environment credentials
 from [Gmail setup](docs/GMAIL_SETUP.md) in Vercel Project Settings, then redeploy.
 Local authorization dependencies and token files are not needed by Vercel.
+For Portive sales initiation and post-call webhooks, apply `sql/002_portive_webhooks.sql`
+only after backup/review, add the new Vercel secrets, then follow the exact
+[rollout runbook](docs/ELEVENLABS_PORTIVE_WEBHOOKS.md). Deploy schema first,
+application second, enable ElevenLabs delivery last.
 
 ### Container deployment (optional)
 
